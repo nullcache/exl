@@ -62,12 +62,12 @@ func write(sheet *xlsx.Sheet, data []any, wc ...*WriteConfig) {
 	}
 }
 
-// Write defines write []T to excel file
+// WriteFile defines write []T to excel file
 //
 // params: file,excel file full path
 //
 // params: typed parameter T, must be implements exl.Bind
-func Write[T WriteConfigurator](file string, ts []T) error {
+func WriteFile[T WriteConfigurator](file string, ts []T) error {
 	f := xlsx.NewFile()
 	write0(f, ts)
 	return f.Save(file)

@@ -290,7 +290,7 @@ func TestReadFileErr(t *testing.T) {
 	}
 	testFile := "tmp.xlsx"
 	defer func() { _ = os.Remove(testFile) }()
-	_ = Write(testFile, []*writeTmp{{}})
+	_ = WriteFile(testFile, []*writeTmp{{}})
 	if _, err := ReadFile[*readSheetIndexOutOfRange](testFile); err != ErrSheetIndexOutOfRange {
 		t.Error("test failed")
 	}

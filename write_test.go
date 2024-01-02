@@ -33,7 +33,7 @@ func (*writeTmp) WriteConfigure(_ *WriteConfig)     {}
 func TestWriteErr(t *testing.T) {
 	testFile := "tmp.xlsx"
 	defer func() { _ = os.Remove(testFile) }()
-	if err := Write(testFile, []*writeTmp{}); err != nil {
+	if err := WriteFile(testFile, []*writeTmp{}); err != nil {
 		t.Error("test failed")
 	}
 }
@@ -48,7 +48,7 @@ func TestWrite(t *testing.T) {
 		{"Name11111", "Name22222", "Name33333", "Name44444", "Name55555"},
 		{"Name111111", "Name222222", "Name333333", "Name444444", "Name555555"},
 	}
-	if err := Write(testFile, data); err != nil {
+	if err := WriteFile(testFile, data); err != nil {
 		t.Error("test failed: " + err.Error())
 	}
 	if models, err := ReadFile[*writeReadTmp](testFile); err != nil {
