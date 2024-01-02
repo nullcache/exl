@@ -1,4 +1,4 @@
-module github.com/go-the-way/exl
+module github.com/nullcache/exl
 
 go 1.18
 
