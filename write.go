@@ -62,6 +62,12 @@ func write(sheet *xlsx.Sheet, data []any, wc ...*WriteConfig) {
 	}
 }
 
+func NewFileFromSlice[T WriteConfigurator](ts []T) *xlsx.File {
+	f := xlsx.NewFile()
+	write0(f, ts)
+	return f
+}
+
 // WriteFile defines write []T to excel file
 //
 // params: file,excel file full path
