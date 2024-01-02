@@ -72,6 +72,13 @@ type (
 		// Configure a limit of 0 to collect all errors, without upper limit.
 		// Defaults to 10.
 		MaxUnmarshalErrors uint64
+		// Parse data from key.
+		DropListMap map[string][]struct {
+			Key   string
+			Value string
+		}
+		// Set pointer struct field to nil when read empty string.
+		PointerCanNil bool
 	}
 	UnmarshalErrorHandling uint8
 	FieldError             struct {
@@ -255,6 +262,8 @@ func ReadBinary[T ReadConfigurator](bytes []byte, filterFunc ...func(t T) (add b
 	var t T
 	rc := defaultReadConfig()
 	t.ReadConfigure(rc)
+	haveDropList := rc.DropListMap != nil
+
 	if rc.SheetIndex < 0 || rc.SheetIndex > len(f.Sheet)-1 {
 		return nil, ErrSheetIndexOutOfRange
 	}
@@ -351,8 +360,39 @@ func ReadBinary[T ReadConfigurator](bytes []byte, filterFunc ...func(t T) (add b
 						continue
 					}
 					cell := row.GetCell(columnIndex)
-
 					destField := val.Field(fi.reflectFieldIndex)
+
+					if rc.PointerCanNil && destField.Kind() == reflect.Ptr {
+						continue
+					}
+
+					if destField.Kind() == reflect.Bool && destField.CanSet() {
+						if cell.Value == "是" {
+							destField.SetBool(true)
+							continue
+						}
+						if cell.Value == "否" {
+							destField.SetBool(false)
+							continue
+						}
+					}
+
+					if destField.Kind() == reflect.String && destField.CanSet() {
+						if haveDropList {
+							dropList, have := rc.DropListMap[fi.header]
+							if have {
+								key := ""
+								for _, v := range dropList {
+									if v.Value == cell.Value {
+										key = v.Key
+									}
+								}
+								destField.SetString(key)
+								continue
+							}
+						}
+					}
+
 					err = fi.unmarshalFunc(destField, cell, unmarshalConfig)
 					if err != nil && rc.UnmarshalErrorHandling != UnmarshalErrorIgnore {
 						fer := FieldError{

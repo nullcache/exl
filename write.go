@@ -12,23 +12,53 @@
 package exl
 
 import (
+	"fmt"
+	"github.com/tealeg/xlsx/v3"
 	"io"
 	"reflect"
-
-	"github.com/tealeg/xlsx/v3"
+	"strings"
+	"time"
 )
 
 type (
 	WriteConfigurator interface{ WriteConfigure(wc *WriteConfig) }
-	WriteConfig       struct{ SheetName, TagName string }
+	WriteConfig       struct {
+		SheetName string
+		TagName   string
+		// Skip when struct field have NOT matched tagName.
+		SkipNoTag bool
+		// Skip when struct field is a nil pointer.
+		SkipNilPointer bool
+		// Set dropList and write value which is transformed from key.
+		DropListMap map[string][]struct {
+			Key   string
+			Value string
+		}
+		// Transform TRUE/FALSE to Chinese 是/否.
+		ChineseBool  bool
+		WriteTimeFmt string
+	}
 )
 
-var defaultWriteConfig = func() *WriteConfig { return &WriteConfig{SheetName: "Sheet1", TagName: "excel"} }
+var defaultWriteConfig = func() *WriteConfig {
+	return &WriteConfig{SheetName: "Sheet1", TagName: "excel", WriteTimeFmt: xlsx.DefaultDateFormat}
+}
 
-func write(sheet *xlsx.Sheet, data []any) {
+func write(sheet *xlsx.Sheet, data []any, wc ...*WriteConfig) {
+	var wConfig *WriteConfig
+	if len(wc) >= 0 {
+		wConfig = wc[0]
+	}
 	r := sheet.AddRow()
 	for _, cell := range data {
-		r.AddCell().SetValue(cell)
+		if reflect.TypeOf(cell) == reflect.TypeOf(time.Time{}) {
+			r.AddCell().SetDateWithOptions(cell.(time.Time), xlsx.DateTimeOptions{
+				Location:        xlsx.DefaultDateOptions.Location,
+				ExcelTimeFormat: wConfig.WriteTimeFmt,
+			})
+		} else {
+			r.AddCell().SetValue(cell)
+		}
 	}
 }
 
@@ -59,29 +89,125 @@ func write0[T WriteConfigurator](f *xlsx.File, ts []T) {
 	if len(ts) > 0 {
 		ts[0].WriteConfigure(wc)
 	}
+	haveDropList := wc.DropListMap != nil
+
 	tT := new(T)
 	if sheet, _ := f.AddSheet(wc.SheetName); sheet != nil {
 		typ := reflect.TypeOf(tT).Elem().Elem()
 		numField := typ.NumField()
-		header := make([]any, numField, numField)
+		header := make([]any, 0, numField)
 		for i := 0; i < numField; i++ {
 			fe := typ.Field(i)
+			if !fe.IsExported() {
+				continue
+			}
 			name := fe.Name
-			if tt, have := fe.Tag.Lookup(wc.TagName); have {
+			tt, have := fe.Tag.Lookup(wc.TagName)
+			if have {
 				name = tt
 			}
-			header[i] = name
+			if have || !wc.SkipNoTag {
+				header = append(header, name)
+			}
 		}
 		// write header
-		write(sheet, header)
+		write(sheet, header, wc)
 		if len(ts) > 0 {
 			// write data
-			for _, t := range ts {
-				data := make([]any, numField, numField)
+			for i1, t := range ts {
+				data := make([]any, 0, numField)
 				for i := 0; i < numField; i++ {
-					data[i] = reflect.ValueOf(t).Elem().Field(i).Interface()
+					rowIndex := i1 + 1
+					colIndex := len(data)
+
+					v := reflect.ValueOf(t).Elem().Field(i)
+					if !v.CanInterface() {
+						continue
+					}
+					tag, have := reflect.TypeOf(t).Elem().Field(i).Tag.Lookup(wc.TagName)
+					if !have && wc.SkipNoTag {
+						continue
+					}
+
+					// 1. add validation
+					basicType := v.Kind()
+					if v.Kind() == reflect.Ptr {
+						basicType = v.Type().Elem().Kind()
+					}
+
+					if basicType == reflect.Bool {
+						dd := xlsx.NewDataValidation(rowIndex, colIndex, rowIndex, colIndex, v.Kind() == reflect.Ptr)
+						if wc.ChineseBool {
+							dd.SetDropList([]string{"是", "否"})
+							errTitle := ""
+							errMsg := "应该为 是或否"
+							dd.SetError(xlsx.StyleStop, &errTitle, &errMsg)
+							sheet.AddDataValidation(dd)
+						} else {
+							dd.SetDropList([]string{"TRUE", "FALSE"})
+							errTitle := ""
+							errMsg := "should be TRUE or FALSE"
+							dd.SetError(xlsx.StyleStop, &errTitle, &errMsg)
+							sheet.AddDataValidation(dd)
+						}
+					}
+
+					if basicType == reflect.String {
+						if haveDropList {
+							dropList, have := wc.DropListMap[tag]
+							if have {
+								dd := xlsx.NewDataValidation(rowIndex, colIndex, rowIndex, colIndex, v.Kind() == reflect.Ptr)
+								dropListArr := make([]string, 0, len(dropList))
+								for _, v := range dropList {
+									dropListArr = append(dropListArr, v.Value)
+								}
+								dd.SetDropList(dropListArr)
+								errTitle := ""
+								errMsg := fmt.Sprintf("应该为 %s 中之一", strings.Join(dropListArr, "、"))
+								dd.SetError(xlsx.StyleStop, &errTitle, &errMsg)
+								sheet.AddDataValidation(dd)
+							}
+						}
+					}
+
+					// 2. add special data
+					if wc.SkipNilPointer && v.Kind() == reflect.Ptr && v.IsNil() {
+						data = append(data, "")
+
+					} else {
+						if v.Kind() == reflect.Bool {
+							if wc.ChineseBool {
+								if v.Bool() {
+									data = append(data, interface{}("是"))
+								} else {
+									data = append(data, interface{}("否"))
+								}
+							} else {
+								data = append(data, v.Interface())
+							}
+							continue
+						}
+
+						if v.Kind() == reflect.String {
+							if haveDropList {
+								dropList, have := wc.DropListMap[tag]
+								if have {
+									key := v.String()
+									value := key
+									for _, v := range dropList {
+										if v.Key == key {
+											value = v.Value
+										}
+									}
+									data = append(data, interface{}(value))
+									continue
+								}
+							}
+						}
+						data = append(data, v.Interface())
+					}
 				}
-				write(sheet, data)
+				write(sheet, data, wc)
 			}
 		}
 	}
