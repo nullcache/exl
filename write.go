@@ -92,9 +92,8 @@ func WriteTo[T WriteConfigurator](w io.Writer, ts []T) error {
 
 func write0[T WriteConfigurator](f *xlsx.File, ts []T) {
 	wc := defaultWriteConfig()
-	if len(ts) > 0 {
-		ts[0].WriteConfigure(wc)
-	}
+	var nilT T
+	nilT.WriteConfigure(wc)
 	haveDropList := wc.DropListMap != nil
 
 	tT := new(T)
@@ -104,6 +103,7 @@ func write0[T WriteConfigurator](f *xlsx.File, ts []T) {
 		header := make([]any, 0, numField)
 		for i := 0; i < numField; i++ {
 			fe := typ.Field(i)
+			t := fe.Type
 			if !fe.IsExported() {
 				continue
 			}
@@ -114,18 +114,60 @@ func write0[T WriteConfigurator](f *xlsx.File, ts []T) {
 			}
 			if have || !wc.SkipNoTag {
 				header = append(header, name)
+
+				// add validation
+				basicType := t.Kind()
+				if t.Kind() == reflect.Ptr {
+					basicType = t.Elem().Kind()
+				}
+
+				rowIndex := 1
+				colIndex := len(header) - 1
+
+				if basicType == reflect.Bool {
+					dd := xlsx.NewDataValidation(rowIndex, colIndex, xlsx.Excel2006MaxRowIndex, colIndex, t.Kind() == reflect.Ptr)
+					if wc.ChineseBool {
+						dd.SetDropList([]string{"是", "否"})
+						errTitle := ""
+						errMsg := "应该为 是或否"
+						dd.SetError(xlsx.StyleStop, &errTitle, &errMsg)
+						sheet.AddDataValidation(dd)
+					} else {
+						dd.SetDropList([]string{"TRUE", "FALSE"})
+						errTitle := ""
+						errMsg := "should be TRUE or FALSE"
+						dd.SetError(xlsx.StyleStop, &errTitle, &errMsg)
+						sheet.AddDataValidation(dd)
+					}
+				}
+
+				if basicType == reflect.String {
+					if haveDropList {
+						dropList, have := wc.DropListMap[tt]
+						if have {
+							dd := xlsx.NewDataValidation(rowIndex, colIndex, xlsx.Excel2006MaxRowIndex, colIndex, t.Kind() == reflect.Ptr)
+							dropListArr := make([]string, 0, len(dropList))
+							for _, v := range dropList {
+								dropListArr = append(dropListArr, v.Value)
+							}
+							dd.SetDropList(dropListArr)
+							errTitle := ""
+							errMsg := fmt.Sprintf("应该为 %s 中之一", strings.Join(dropListArr, "、"))
+							dd.SetError(xlsx.StyleStop, &errTitle, &errMsg)
+							sheet.AddDataValidation(dd)
+						}
+					}
+				}
 			}
 		}
 		// write header
 		write(sheet, header, wc)
+
 		if len(ts) > 0 {
 			// write data
-			for i1, t := range ts {
+			for _, t := range ts {
 				data := make([]any, 0, numField)
 				for i := 0; i < numField; i++ {
-					rowIndex := i1 + 1
-					colIndex := len(data)
-
 					v := reflect.ValueOf(t).Elem().Field(i)
 					if !v.CanInterface() {
 						continue
@@ -135,48 +177,7 @@ func write0[T WriteConfigurator](f *xlsx.File, ts []T) {
 						continue
 					}
 
-					// 1. add validation
-					basicType := v.Kind()
-					if v.Kind() == reflect.Ptr {
-						basicType = v.Type().Elem().Kind()
-					}
-
-					if basicType == reflect.Bool {
-						dd := xlsx.NewDataValidation(rowIndex, colIndex, rowIndex, colIndex, v.Kind() == reflect.Ptr)
-						if wc.ChineseBool {
-							dd.SetDropList([]string{"是", "否"})
-							errTitle := ""
-							errMsg := "应该为 是或否"
-							dd.SetError(xlsx.StyleStop, &errTitle, &errMsg)
-							sheet.AddDataValidation(dd)
-						} else {
-							dd.SetDropList([]string{"TRUE", "FALSE"})
-							errTitle := ""
-							errMsg := "should be TRUE or FALSE"
-							dd.SetError(xlsx.StyleStop, &errTitle, &errMsg)
-							sheet.AddDataValidation(dd)
-						}
-					}
-
-					if basicType == reflect.String {
-						if haveDropList {
-							dropList, have := wc.DropListMap[tag]
-							if have {
-								dd := xlsx.NewDataValidation(rowIndex, colIndex, rowIndex, colIndex, v.Kind() == reflect.Ptr)
-								dropListArr := make([]string, 0, len(dropList))
-								for _, v := range dropList {
-									dropListArr = append(dropListArr, v.Value)
-								}
-								dd.SetDropList(dropListArr)
-								errTitle := ""
-								errMsg := fmt.Sprintf("应该为 %s 中之一", strings.Join(dropListArr, "、"))
-								dd.SetError(xlsx.StyleStop, &errTitle, &errMsg)
-								sheet.AddDataValidation(dd)
-							}
-						}
-					}
-
-					// 2. add special data
+					// add special data
 					if v.Kind() == reflect.Ptr {
 						if wc.SkipNilPointer && v.IsNil() {
 							data = append(data, "")
