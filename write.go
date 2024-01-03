@@ -177,8 +177,13 @@ func write0[T WriteConfigurator](f *xlsx.File, ts []T) {
 					}
 
 					// 2. add special data
-					if wc.SkipNilPointer && v.Kind() == reflect.Ptr && v.IsNil() {
-						data = append(data, "")
+					if v.Kind() == reflect.Ptr {
+						if wc.SkipNilPointer && v.IsNil() {
+							data = append(data, "")
+						}
+						if !v.IsNil() {
+							data = append(data, v.Elem().Interface())
+						}
 
 					} else {
 						if v.Kind() == reflect.Bool {
