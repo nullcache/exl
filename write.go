@@ -180,9 +180,8 @@ func write0[T WriteConfigurator](f *xlsx.File, ts []T) {
 					if v.Kind() == reflect.Ptr {
 						if wc.SkipNilPointer && v.IsNil() {
 							data = append(data, "")
-						}
-						if !v.IsNil() {
-							data = append(data, v.Elem().Interface())
+						} else if !v.IsNil() {
+							v = v.Elem()
 						}
 
 					} else {
