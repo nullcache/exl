@@ -180,42 +180,42 @@ func write0[T WriteConfigurator](f *xlsx.File, ts []T) {
 					if v.Kind() == reflect.Ptr {
 						if wc.SkipNilPointer && v.IsNil() {
 							data = append(data, "")
+							continue
 						} else if !v.IsNil() {
 							v = v.Elem()
 						}
-
-					} else {
-						if v.Kind() == reflect.Bool {
-							if wc.ChineseBool {
-								if v.Bool() {
-									data = append(data, interface{}("是"))
-								} else {
-									data = append(data, interface{}("否"))
-								}
-							} else {
-								data = append(data, v.Interface())
-							}
-							continue
-						}
-
-						if v.Kind() == reflect.String {
-							if haveDropList {
-								dropList, have := wc.DropListMap[tag]
-								if have {
-									key := v.String()
-									value := key
-									for _, v := range dropList {
-										if v.Key == key {
-											value = v.Value
-										}
-									}
-									data = append(data, interface{}(value))
-									continue
-								}
-							}
-						}
-						data = append(data, v.Interface())
 					}
+					if v.Kind() == reflect.Bool {
+						if wc.ChineseBool {
+							if v.Bool() {
+								data = append(data, interface{}("是"))
+							} else {
+								data = append(data, interface{}("否"))
+							}
+						} else {
+							data = append(data, v.Interface())
+						}
+						continue
+					}
+
+					if v.Kind() == reflect.String {
+						if haveDropList {
+							dropList, have := wc.DropListMap[tag]
+							if have {
+								key := v.String()
+								value := key
+								for _, v := range dropList {
+									if v.Key == key {
+										value = v.Value
+									}
+								}
+								data = append(data, interface{}(value))
+								continue
+							}
+						}
+					}
+					data = append(data, v.Interface())
+
 				}
 				write(sheet, data, wc)
 			}
