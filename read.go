@@ -18,6 +18,7 @@ import (
 	"io"
 	"os"
 	"reflect"
+	"strconv"
 	"time"
 
 	"github.com/tealeg/xlsx/v3"
@@ -362,7 +363,15 @@ func ReadBinary[T ReadConfigurator](bytes []byte, filterFunc ...func(t T) (add b
 					cell := row.GetCell(columnIndex)
 					destField := val.Field(fi.reflectFieldIndex)
 
-					if rc.PointerCanNil && destField.Kind() == reflect.Ptr {
+					if rc.PointerCanNil && destField.Kind() == reflect.Ptr && cell.Value == "" {
+						continue
+					}
+
+					// TODO: need elegant implement.
+					if destField.Type() == reflect.TypeOf(&time.Time{}) && destField.CanSet() {
+						ft, _ := strconv.ParseFloat(cell.Value, 10)
+						t := xlsx.TimeFromExcelTime(ft, f.Date1904)
+						destField.Set(reflect.ValueOf(&t))
 						continue
 					}
 

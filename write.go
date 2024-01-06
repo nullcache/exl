@@ -52,10 +52,15 @@ func write(sheet *xlsx.Sheet, data []any, wc ...*WriteConfig) {
 	r := sheet.AddRow()
 	for _, cell := range data {
 		if reflect.TypeOf(cell) == reflect.TypeOf(time.Time{}) {
-			r.AddCell().SetDateWithOptions(cell.(time.Time), xlsx.DateTimeOptions{
-				Location:        xlsx.DefaultDateOptions.Location,
-				ExcelTimeFormat: wConfig.WriteTimeFmt,
-			})
+			t := cell.(time.Time)
+			if t.IsZero() {
+				r.AddCell().SetValue("")
+			} else {
+				r.AddCell().SetDateWithOptions(t, xlsx.DateTimeOptions{
+					Location:        xlsx.DefaultDateOptions.Location,
+					ExcelTimeFormat: wConfig.WriteTimeFmt,
+				})
+			}
 		} else {
 			r.AddCell().SetValue(cell)
 		}
@@ -189,9 +194,9 @@ func write0[T WriteConfigurator](f *xlsx.File, ts []T) {
 					if v.Kind() == reflect.Bool {
 						if wc.ChineseBool {
 							if v.Bool() {
-								data = append(data, interface{}("是"))
+								data = append(data, "是")
 							} else {
-								data = append(data, interface{}("否"))
+								data = append(data, "否")
 							}
 						} else {
 							data = append(data, v.Interface())
@@ -210,7 +215,7 @@ func write0[T WriteConfigurator](f *xlsx.File, ts []T) {
 										value = v.Value
 									}
 								}
-								data = append(data, interface{}(value))
+								data = append(data, value)
 								continue
 							}
 						}
