@@ -377,18 +377,20 @@ func ReadBinary[T ReadConfigurator](bytes []byte, filterFunc ...func(t T) (add b
 
 					if (destField.Kind() == reflect.Bool || destField.Type() == reflect.TypeOf((*bool)(nil))) && destField.CanSet() {
 						if cell.Value == "是" {
+							b := true
 							if destField.Kind() == reflect.Ptr {
-								destField.Set(reflect.ValueOf(&cell.Value))
+								destField.Set(reflect.ValueOf(&b))
 							} else {
-								destField.SetBool(true)
+								destField.SetBool(b)
 							}
 							continue
 						}
 						if cell.Value == "否" {
+							b := false
 							if destField.Kind() == reflect.Ptr {
-								destField.Set(reflect.ValueOf(&cell.Value))
+								destField.Set(reflect.ValueOf(&b))
 							} else {
-								destField.SetBool(false)
+								destField.SetBool(b)
 							}
 							continue
 						}
