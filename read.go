@@ -367,7 +367,7 @@ func ReadBinary[T ReadConfigurator](bytes []byte, filterFunc ...func(t T) (add b
 						continue
 					}
 
-					// TODO: need elegant implement.
+					// TODO: need elegant implement to handle pointer.
 					if destField.Type() == reflect.TypeOf(&time.Time{}) && destField.CanSet() {
 						ft, _ := strconv.ParseFloat(cell.Value, 10)
 						t := xlsx.TimeFromExcelTime(ft, f.Date1904)
@@ -375,18 +375,26 @@ func ReadBinary[T ReadConfigurator](bytes []byte, filterFunc ...func(t T) (add b
 						continue
 					}
 
-					if destField.Kind() == reflect.Bool && destField.CanSet() {
+					if (destField.Kind() == reflect.Bool || destField.Type() == reflect.TypeOf((*bool)(nil))) && destField.CanSet() {
 						if cell.Value == "是" {
-							destField.SetBool(true)
+							if destField.Kind() == reflect.Ptr {
+								destField.Set(reflect.ValueOf(&cell.Value))
+							} else {
+								destField.SetBool(true)
+							}
 							continue
 						}
 						if cell.Value == "否" {
-							destField.SetBool(false)
+							if destField.Kind() == reflect.Ptr {
+								destField.Set(reflect.ValueOf(&cell.Value))
+							} else {
+								destField.SetBool(false)
+							}
 							continue
 						}
 					}
 
-					if destField.Kind() == reflect.String && destField.CanSet() {
+					if (destField.Kind() == reflect.String || destField.Type() == reflect.TypeOf((*string)(nil))) && destField.CanSet() {
 						if haveDropList {
 							dropList, have := rc.DropListMap[fi.header]
 							if have {
@@ -396,7 +404,11 @@ func ReadBinary[T ReadConfigurator](bytes []byte, filterFunc ...func(t T) (add b
 										key = v.Key
 									}
 								}
-								destField.SetString(key)
+								if destField.Kind() == reflect.Ptr {
+									destField.Set(reflect.ValueOf(&key))
+								} else {
+									destField.SetString(key)
+								}
 								continue
 							}
 						}
